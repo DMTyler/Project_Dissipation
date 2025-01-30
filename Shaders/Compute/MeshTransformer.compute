@@ -1,0 +1,238 @@
+#pragma kernel CSMain
+#include "../random.hlsl"
+#include "../math.hlsl"
+#include "../noise.hlsl"
+
+#define SPEED_MODE_CONSTANT 1
+#define SPEED_MODE_RANDOM 2
+#define SPEED_MODE_CURVE 3
+
+#define SIMULATION_MODE_WORLD 1
+#define SIMULATION_MODE_OBJECT 2
+
+#define START_TIME_MODE_UNDER_CONSTANT 1
+#define START_TIME_MODE_GREY_MAP 2
+
+struct VertexData
+{
+    float3 position;
+    float3 normal;
+    float2 uv;
+    float2 uv6;
+    float3 uv7;
+};
+
+int GlobalSimulationMode;       // 全局模拟模式
+float3 BaseDirection;           // 基础方向向量
+int DirectionSimulationMode;    // 方向模拟模式
+int EnableRandomAngle;          // 是否启用随机角度
+float RandomAngleRange;         // 随机角度范围. 单位: 角度
+int SpeedMode;                  // 速度模式
+float Speed;                    // 速度
+float MinSpeed;                 // 最小速度
+float MaxSpeed;                 // 最大速度
+StructuredBuffer<float> SpeedCurveSums;     // 速度曲线离散积分
+int SpeedCurveSampleCount;      // 速度曲线采样数
+int EnableRandomLifeTime;       // 是否启用随机生命周期
+float LifeTime;                 // 生命周期
+float MinLifeTime;              // 最小生命周期
+float MaxLifeTime;
+int StartTimeMode;              // 起始时间模式
+float MaxStartTime;             // 最大开始时间
+Texture2D<float> GreyMap;              // 开始时间灰度贴图
+SamplerState samplerGreyMap;
+float BaseMaxStartTime;         // 基础最大开始时间
+float RandomStartTimeRange;     // 随机开始时间范围
+int EnableProcessDisplacement;  // 过程随机
+float MaxDisplacementAmplitude; // 最大位移幅度
+float MinDisplacementFrequency; // 最小位移频率
+float MaxDisplacementFrequency; // 最大位移频率
+int DisplacementWaveCount;      // 正弦波数量
+
+int DirectionRandomSeed;        // 方向随机种子
+int SpeedRandomSeed;            // 速度随机种子
+int LifeTimeRandomSeed;         // 生命周期随机种子
+int StartTimeRandomSeed;        // 开始时间随机种子
+int DisplacementRandomSeed;     // 位移随机种子
+
+float4x4 ObjectToWorldMat;      // 模型到世界矩阵
+float4x4 WorldToObjectMat;      // 世界到模型矩阵
+
+float T;                        // 当前时间
+StructuredBuffer<float3> InitialPositions;          // 初始位置
+RWStructuredBuffer<float4x4> ObjectToWorldOnStart;  // 开始时的变换
+RWStructuredBuffer<int> IsStarted;                  // 是否开始
+RWByteAddressBuffer VertexBuffer;                   // 顶点缓冲区
+
+float3 ObjectToWorld(float3 objPos, int id)
+{
+    if (IsStarted[id] == 1)
+    {
+        float4x4 objectToWorldOnStart = ObjectToWorldOnStart[id];
+        float4 wPos = mul(objectToWorldOnStart, float4(objPos, 1.0));
+        return wPos.xyz / wPos.w;
+    }
+    else
+    {
+        float4 wPos = mul(ObjectToWorldMat, float4(objPos, 1.0));
+        return wPos.xyz / wPos.w;
+    }
+}
+
+float3 WorldToObject(float3 worldPos, int id)
+{
+    float4 oPos = mul(WorldToObjectMat, float4(worldPos, 1.0));
+    return oPos.xyz / oPos.w;
+}
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float3 initialPosition = InitialPositions[id.x];
+    float4 middlePointResult = asfloat(VertexBuffer.Load4((id.x + 1) * 56 - 16));
+    float2 middlePointUV = asfloat(VertexBuffer.Load2((id.x + 1) * 56 - 24));
+    float3 targetPosition = middlePointResult.xyz;
+    int index = middlePointResult.w;
+
+    float startTime;
+    if (StartTimeMode == START_TIME_MODE_GREY_MAP)
+    {
+        float grey = GreyMap.SampleLevel(samplerGreyMap, middlePointUV, 0);
+        float randomBias = random(-RandomStartTimeRange, RandomStartTimeRange, index + StartTimeRandomSeed);
+        float baseStartTime = lerp(0, BaseMaxStartTime, grey);
+        startTime = clamp(baseStartTime + randomBias, 0.0f, 1.0f);
+    }
+    else
+    {
+        startTime = lerp(0, MaxStartTime, random(0, 1, index + StartTimeRandomSeed));
+    }
+    
+    float lifetime;
+    if (EnableRandomLifeTime == 1)
+    {
+        lifetime = lerp(MinLifeTime, MaxLifeTime, random(0, 1, index + LifeTimeRandomSeed));
+    }
+    else
+    {
+        lifetime = LifeTime;
+    }
+
+    if (T > startTime && IsStarted[id.x] == 0)
+    {
+        IsStarted[id.x] = 1;
+        ObjectToWorldOnStart[id.x] = ObjectToWorldMat;
+    }
+    
+    if (GlobalSimulationMode == SIMULATION_MODE_WORLD)
+    {
+        initialPosition = ObjectToWorld(initialPosition, id.x);
+        targetPosition = ObjectToWorld(targetPosition, id.x);
+    }
+
+    float t = (T - startTime) / lifetime;
+    t = clamp(t, 0.0f, 1.0f);
+
+    float distance;
+    if (SpeedMode == SPEED_MODE_CONSTANT)
+    {
+        distance = Speed * lerp(0, lifetime, t);
+    }
+    else if (SpeedMode == SPEED_MODE_RANDOM)
+    {
+        float speed = lerp(MinSpeed, MaxSpeed, random(0, 1, index));
+        distance = speed * lerp(0, lifetime, t);
+    }
+    else
+    {
+        float currentFloatIndex = t * SpeedCurveSampleCount;
+        int currentLeftIndex = (int)floor(currentFloatIndex);
+        int currentRightIndex = currentLeftIndex + 1;
+        if (currentLeftIndex >= SpeedCurveSampleCount || currentRightIndex >= SpeedCurveSampleCount)
+        {
+            return;
+        }
+        float leftDis = SpeedCurveSums[currentLeftIndex];
+        float rightDis = SpeedCurveSums[currentRightIndex];
+        distance = lerp(leftDis, rightDis, currentFloatIndex - currentLeftIndex);
+    }
+    
+    float3 distanceVec;
+
+    float3 baseDirection;
+    if (DirectionSimulationMode == SIMULATION_MODE_OBJECT && GlobalSimulationMode == SIMULATION_MODE_WORLD)
+    {
+        baseDirection = mul(ObjectToWorldMat, float4(BaseDirection, 0)).xyz;
+    }
+    else if (DirectionSimulationMode == SIMULATION_MODE_WORLD && GlobalSimulationMode == SIMULATION_MODE_OBJECT)
+    {
+        baseDirection = mul(WorldToObjectMat, float4(BaseDirection, 0)).xyz;
+    }
+    else
+    {
+        baseDirection = BaseDirection;
+    }
+    
+    if (EnableRandomAngle == 1)
+    {
+        float radius = ang2rad(RandomAngleRange);
+        baseDirection = normalize(baseDirection);
+        float cosTheta = 1 - random(0, 1, index + DirectionRandomSeed) * (1 - cos(radius));
+        float sinTheta = sqrt(1 - cosTheta * cosTheta);
+        float phi = random(0, 2 * PI, index + 2 * DirectionRandomSeed);
+
+        float3 u = normalize(cross(baseDirection, float3(0, 1, 0)));
+        if (magnitude(u) < 0.1f)
+        {
+            u = normalize(cross(baseDirection, float3(1, 0, 0)));
+        }
+        float3 v = cross(baseDirection, u);
+
+        distanceVec = cosTheta * baseDirection + sinTheta * (cos(phi) * u + sin(phi) * v);
+        distanceVec = distance * normalize(distanceVec);
+    }
+    else
+    {
+        distanceVec =  distance * normalize(baseDirection);
+    }
+    
+    float3 dir2Mid = targetPosition - initialPosition;
+    dir2Mid = lerp(float3(0, 0, 0), dir2Mid, t);
+    
+    float3 newPosition = initialPosition + distanceVec + dir2Mid;
+    float3 noise = 0;
+    
+    if (EnableProcessDisplacement == 1)
+    {
+        float x = SineWaveCombination(t,
+            DisplacementRandomSeed + index,
+            MinDisplacementFrequency,
+            MaxDisplacementFrequency, 
+            0,
+            MaxDisplacementAmplitude,
+            DisplacementWaveCount);
+        float y = SineWaveCombination(t,
+            DisplacementRandomSeed + 1 + index,
+            MinDisplacementFrequency,
+            MaxDisplacementFrequency,
+            0,
+            MaxDisplacementAmplitude,
+            DisplacementWaveCount);
+        float z = SineWaveCombination(t,
+            DisplacementRandomSeed + 2 + index,
+            MinDisplacementFrequency,
+            MaxDisplacementFrequency,
+            0,
+            MaxDisplacementAmplitude,
+            DisplacementWaveCount);
+        noise = float3(x, y, z);
+    }
+
+    newPosition += noise;
+    
+    if (GlobalSimulationMode == SIMULATION_MODE_WORLD)
+    {
+        newPosition = WorldToObject(newPosition, id.x);
+    }
+    
+    VertexBuffer.Store3(id.x * 56, asuint(newPosition));
+}

@@ -1,0 +1,67 @@
+#pragma kernel CSMiddlePoint
+#pragma kernel CSDivideTriangles
+
+int TriangleCount;
+StructuredBuffer<int> Triangles;
+StructuredBuffer<float3> Vertices;
+StructuredBuffer<float3> Normals;
+StructuredBuffer<float2> UVs;
+
+RWStructuredBuffer<float2> CSMiddlePointResultUVs;
+RWStructuredBuffer<float4> CSMiddlePointResult;
+
+RWStructuredBuffer<float3> CSDivideTrianglesResultNewVertices;
+RWStructuredBuffer<int> CSDivideTrianglesResultNewTriangles;
+RWStructuredBuffer<float2> CSDivideTrianglesResultNewUVs;
+RWStructuredBuffer<float3> CSDivideTrianglesResultNewNormals;
+
+
+[numthreads(16, 1, 1)]
+void CSMiddlePoint (uint3 id : SV_DispatchThreadID)
+{
+    int index = id.x;
+    if (index < TriangleCount)
+    {
+        float3 v0 = Vertices[Triangles[index * 3 + 0]];
+        float3 v1 = Vertices[Triangles[index * 3 + 1]];
+        float3 v2 = Vertices[Triangles[index * 3 + 2]];
+
+        float2 uv0 = UVs[Triangles[index * 3 + 0]];
+        float2 uv1 = UVs[Triangles[index * 3 + 1]];
+        float2 uv2 = UVs[Triangles[index * 3 + 2]];
+        
+        CSMiddlePointResult[Triangles[index * 3 + 0]] = 
+        CSMiddlePointResult[Triangles[index * 3 + 1]] = 
+        CSMiddlePointResult[Triangles[index * 3 + 2]] = float4((v0 + v1 + v2) / 3, index);
+
+        CSMiddlePointResultUVs[Triangles[index * 3 + 0]] = 
+        CSMiddlePointResultUVs[Triangles[index * 3 + 1]] = 
+        CSMiddlePointResultUVs[Triangles[index * 3 + 2]] = (uv0 + uv1 + uv2) / 3;
+            
+    }
+}
+
+[numthreads(16, 1, 1)]
+void CSDivideTriangles (uint3 id : SV_DispatchThreadID)
+{
+    int index = id.x;
+    int v0 = Triangles[index * 3 + 0];
+    int v1 = Triangles[index * 3 + 1];
+    int v2 = Triangles[index * 3 + 2];
+    
+    CSDivideTrianglesResultNewVertices[index * 3 + 0] = Vertices[v0];
+    CSDivideTrianglesResultNewVertices[index * 3 + 1] = Vertices[v1];
+    CSDivideTrianglesResultNewVertices[index * 3 + 2] = Vertices[v2];
+
+    CSDivideTrianglesResultNewUVs[index * 3 + 0] = UVs[v0];
+    CSDivideTrianglesResultNewUVs[index * 3 + 1] = UVs[v1];
+    CSDivideTrianglesResultNewUVs[index * 3 + 2] = UVs[v2];
+
+    CSDivideTrianglesResultNewNormals[index * 3 + 0] = Normals[v0];
+    CSDivideTrianglesResultNewNormals[index * 3 + 1] = Normals[v1];
+    CSDivideTrianglesResultNewNormals[index * 3 + 2] = Normals[v2];
+
+    CSDivideTrianglesResultNewTriangles[index * 3 + 0] = index * 3 + 0;
+    CSDivideTrianglesResultNewTriangles[index * 3 + 1] = index * 3 + 1;
+    CSDivideTrianglesResultNewTriangles[index * 3 + 2] = index * 3 + 2;
+}
