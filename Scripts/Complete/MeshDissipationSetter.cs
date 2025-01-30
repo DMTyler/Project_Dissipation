@@ -498,37 +498,6 @@ namespace DGraphics.Dissipation
         {
             DisplacementRandomSeed = UnityEngine.Random.Range(0, 255);
         }
-
-        #region IAnimParams Implementation
-        int IAnimParams.GlobalSimulationMode  => (int)GlobalSimulationMode;
-        Vector3 IAnimParams.BaseDirection => BaseDirection;
-        int IAnimParams.DirectionSimulationMode => (int)DirectionSimulationMode;
-        bool IAnimParams.EnableRandomDirection => EnableRandomDirection;
-        float IAnimParams.RandomAngleRange => RandomAngleRange;
-        int IAnimParams.SpeedMode => (int)SpeedMode;
-        float IAnimParams.ConstantSpeed => ConstantSpeed;
-        float IAnimParams.MinSpeed => MinSpeed;
-        float IAnimParams.MaxSpeed => MaxSpeed;
-        int IAnimParams.SpeedCurveSampleCount => SpeedCurveSampleCount;
-        bool IAnimParams.EnableRandomLifeTime => EnableRandomLifeTime;
-        float IAnimParams.LifeTime => LifeTime;
-        float IAnimParams.MinLifeTime => MinLifeTime;
-        float IAnimParams.MaxLifeTime => MaxLifeTime;
-        int IAnimParams.StartTimeMode => (int)StartTimeMode;
-        float IAnimParams.MaxStartTime => MaxStartTime;
-        float IAnimParams.BaseMaxStartTime => BaseMaxStartTime;
-        float IAnimParams.RandomStartTimeRange => RandomStartTimeRange;
-        int IAnimParams.DirectionRandomSeed => DirectionRandomSeed;
-        int IAnimParams.SpeedRandomSeed => SpeedRandomSeed;
-        int IAnimParams.LifeTimeRandomSeed => LifeTimeRandomSeed;
-        int IAnimParams.StartTimeRandomSeed => StartTimeRandomSeed;
-        bool IAnimParams.EnableProcessDisplacement => EnableProcessDisplacement;
-        float IAnimParams.MaxDisplacementAmplitude => MaxDisplacementAmplitude;
-        float IAnimParams.MinDisplacementFrequency => MinDisplacementFrequency;
-        float IAnimParams.MaxDisplacementFrequency => MaxDisplacementFrequency;
-        int IAnimParams.DisplacementWaveCount => DisplacementWaveCount;
-        int IAnimParams.DisplacementRandomSeed => DisplacementRandomSeed;
-        #endregion
         public ComputeBuffer SpeedCurveBuffer { get; private set; }
         public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; }
 

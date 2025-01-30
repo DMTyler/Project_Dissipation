@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace DGraphics.Dissipation
+namespace DGraphics.Dissipation.Simple
 { 
     public class MeshDissipationController 
     {
@@ -24,7 +24,7 @@ namespace DGraphics.Dissipation
             (VertexAttribute.TexCoord7, VertexAttributeFormat.Float32, 4, 0)
         };
 
-        private static List<MeshDissipationInfo> _meshDissipationInfos = new();
+        private static List<SimpleMeshDissipationInfo> _meshDissipationInfos = new();
         private static int _kernelID = 0;
         
         public struct ShaderTags
@@ -70,15 +70,15 @@ namespace DGraphics.Dissipation
             public static int ObjectToWorldMat = Shader.PropertyToID("ObjectToWorldMat");
             public static int WorldToObjectMat = Shader.PropertyToID("WorldToObjectMat");
             # endregion
-            public static void SetAnimParams(IAnimParams animParams, CommandBuffer cmd, ComputeShader cs,
+            public static void SetAnimParams(SimpleMeshDissipationAnimParams animParams, CommandBuffer cmd, ComputeShader cs,
                 int kernelID)
             {
-                cmd.SetComputeIntParam(cs, GlobalSimulationMode, animParams.GlobalSimulationMode);
+                cmd.SetComputeIntParam(cs, GlobalSimulationMode, (int)animParams.GlobalSimulationMode);
                 cmd.SetComputeVectorParam(cs, BaseDirection, animParams.BaseDirection);
-                cmd.SetComputeIntParam(cs, DirectionSimulationMode, animParams.DirectionSimulationMode);
+                cmd.SetComputeIntParam(cs, DirectionSimulationMode, (int)animParams.DirectionSimulationMode);
                 cmd.SetComputeIntParam(cs, EnableRandomAngle, animParams.EnableRandomDirection ? 1 : 0);
                 cmd.SetComputeFloatParam(cs, RandomAngleRange, animParams.RandomAngleRange);
-                cmd.SetComputeIntParam(cs, SpeedMode, animParams.SpeedMode);
+                cmd.SetComputeIntParam(cs, SpeedMode, (int)animParams.SpeedMode);
                 cmd.SetComputeFloatParam(cs, Speed, animParams.ConstantSpeed);
                 cmd.SetComputeFloatParam(cs, MinSpeed, animParams.MinSpeed);
                 cmd.SetComputeFloatParam(cs, MaxSpeed, animParams.MaxSpeed);
@@ -88,7 +88,7 @@ namespace DGraphics.Dissipation
                 cmd.SetComputeFloatParam(cs, LifeTime, animParams.LifeTime);
                 cmd.SetComputeFloatParam(cs, MinLifeTime, animParams.MinLifeTime);
                 cmd.SetComputeFloatParam(cs, MaxLifeTime, animParams.MaxLifeTime);
-                cmd.SetComputeIntParam(cs, StartTimeMode, animParams.StartTimeMode);
+                cmd.SetComputeIntParam(cs, StartTimeMode, (int)animParams.StartTimeMode);
                 cmd.SetComputeFloatParam(cs, MaxStartTime, animParams.MaxStartTime);
                 cmd.SetComputeFloatParam(cs, BaseMaxStartTime, animParams.BaseMaxStartTime);
                 cmd.SetComputeFloatParam(cs, RandomStartTimeRange, animParams.RandomStartTimeRange);
@@ -171,7 +171,7 @@ namespace DGraphics.Dissipation
             }
         }
 
-        public static bool Register(MeshDissipationInfo info, out string error)
+        public static bool Register(SimpleMeshDissipationInfo info, out string error)
         {
             error = null;
             if (info == null)
@@ -189,7 +189,7 @@ namespace DGraphics.Dissipation
             return true;
         }
 
-        public static void Unregister(MeshDissipationInfo info)
+        public static void Unregister(SimpleMeshDissipationInfo info)
         {
             if (info == null) 
                 return;
@@ -237,7 +237,7 @@ namespace DGraphics.Dissipation
         [DidReloadScripts]
         private static void OnScriptsReloaded()
         {
-            var instances = UnityEngine.Object.FindObjectsOfType<MeshDissipationSetter>();
+            var instances = UnityEngine.Object.FindObjectsOfType<SimpleMeshDissipationSetter>();
             foreach (var instance in instances)
             {
                 instance.Reset();
@@ -245,7 +245,7 @@ namespace DGraphics.Dissipation
         }
     }
     
-    public class MeshDissipationInfo : IDisposable
+    public class SimpleMeshDissipationInfo : IDisposable
     {
         public readonly int MeshCount;
         public readonly IReadOnlyList<ComputeBuffer> InitialPositionsBuffers;
@@ -253,7 +253,7 @@ namespace DGraphics.Dissipation
         public readonly IReadOnlyList<int> VertexCounts;
         public readonly IReadOnlyList<Transform> Transforms;
         
-        public readonly IAnimParams AnimParams;
+        public readonly SimpleMeshDissipationAnimParams AnimParams;
         
         public readonly List<ComputeBuffer> ObjectToWorldOnStartBuffers = new();
         public readonly List<ComputeBuffer> IsStartedBuffers = new();
@@ -270,7 +270,7 @@ namespace DGraphics.Dissipation
         {
             var lifeTime = AnimParams.EnableRandomLifeTime? AnimParams.MaxLifeTime : AnimParams.LifeTime;
 
-            if (AnimParams.StartTimeMode == (int)MeshDissipationAnimParams.AnimStartTimeMode.RandomUnderConstant)
+            if (AnimParams.StartTimeMode == SimpleMeshDissipationAnimParams.AnimStartTimeMode.RandomUnderConstant)
                 lifeTime += AnimParams.MaxStartTime;
             else
                 lifeTime += (AnimParams.BaseMaxStartTime + AnimParams.RandomStartTimeRange);
@@ -320,13 +320,13 @@ namespace DGraphics.Dissipation
             GenerateSingleAnimLoopResources();
         }
         
-        public MeshDissipationInfo(
+        public SimpleMeshDissipationInfo(
             int MeshCount, 
             IReadOnlyList<ComputeBuffer> initialPositionsBuffers, 
             IReadOnlyList<GraphicsBuffer> vertexBuffers, 
             IReadOnlyList<int> vertexCounts,
             IReadOnlyList<Transform> transforms,
-            IAnimParams animParams
+            SimpleMeshDissipationAnimParams animParams
             )
         {
             this.MeshCount = MeshCount;

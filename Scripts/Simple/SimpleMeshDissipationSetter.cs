@@ -12,24 +12,24 @@ namespace DGraphics.Dissipation.Simple
     /// Setup transformation of vertices
     /// </summary>
     [ExecuteAlways]
-    [RequireComponent(typeof(MeshFilter), typeof(MeshDecomposer))]
+    [RequireComponent(typeof(MeshFilter), typeof(SimpleMeshDecomposer))]
     public class SimpleMeshDissipationSetter : MonoBehaviour
     {
         #region Animation Params
-        [Header("Animation Params"), Inspector.LabelText("Animation Params")]
+        [Header("Animation Params")]
         public SimpleMeshDissipationAnimParams AnimParams = new();
         #endregion
 
         #region Other Params
         
         [Space(10), Header("Other Params")]
-        [SerializeField, Inspector.LabelText("Mesh Filters")] private List<MeshFilter> _meshFilters = new();
+        [SerializeField] private List<MeshFilter> _meshFilters = new();
         #endregion
         
         #region Fields
 
         private bool _initialized;
-        private MeshDissipationInfo _info;
+        private SimpleMeshDissipationInfo _info;
 
         #endregion
         
@@ -50,7 +50,7 @@ namespace DGraphics.Dissipation.Simple
             var meshes = _meshFilters.Select(x => x.sharedMesh).ToList();
             if (meshes.Count == 0)
             {
-                Debug.LogError($"Null Mesh List for Script: {nameof(MeshDissipationSetter)}");
+                Debug.LogError($"Null Mesh List for Script: {nameof(SimpleMeshDissipationSetter)}");
                 return;
             }
             
@@ -69,7 +69,7 @@ namespace DGraphics.Dissipation.Simple
                 if (!MeshDissipationController.SatisfyVertexAttributes(mesh, out var error))
                 {
                     Debug.LogError($"Mesh Attributes Requirement Not Satisfied. " +
-                                   $"Did you forget to decompose mesh with {nameof(MeshDecomposer)} first before setup? \n" +
+                                   $"Did you forget to decompose mesh with {nameof(SimpleMeshDecomposer)} first before setup? \n" +
                                    $"Error message: {error}");
                     return;
                 }
@@ -100,7 +100,7 @@ namespace DGraphics.Dissipation.Simple
             
             var animParams = AnimParams;
             
-            _info = new MeshDissipationInfo(
+            _info = new SimpleMeshDissipationInfo(
                 meshes.Count, 
                 initialPositionBuffers, 
                 buffers, 
@@ -140,12 +140,12 @@ namespace DGraphics.Dissipation.Simple
         
         private bool _isStarted;
         private bool Startable() => (_initialized && !_isStarted);
-        [Button("Start"), Sirenix.OdinInspector.ShowIf("_initialized")]
+        [Button("Start")]
         public void StartAnim()
         {
             if (!_initialized)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -155,7 +155,7 @@ namespace DGraphics.Dissipation.Simple
             
             if (_info == null)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -171,7 +171,7 @@ namespace DGraphics.Dissipation.Simple
         {
             if (!_initialized)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -181,7 +181,7 @@ namespace DGraphics.Dissipation.Simple
             
             if (_info == null)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -197,7 +197,7 @@ namespace DGraphics.Dissipation.Simple
         {
             if (!_initialized)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -207,7 +207,7 @@ namespace DGraphics.Dissipation.Simple
             
             if (_info == null)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -223,7 +223,7 @@ namespace DGraphics.Dissipation.Simple
         {
             if (!_initialized)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -233,7 +233,7 @@ namespace DGraphics.Dissipation.Simple
             
             if (_info == null)
             {
-                Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                $"GameObject: {gameObject.name}");
                 return;
             }
@@ -254,7 +254,7 @@ namespace DGraphics.Dissipation.Simple
             {
                 if (_info == null)
                 {
-                    Debug.LogError($"Please initialize {nameof(MeshDissipationSetter)} first. \n" +
+                    Debug.LogError($"Please initialize {nameof(SimpleMeshDissipationSetter)} first. \n" +
                                    $"GameObject: {gameObject.name}");
                     return;
                 }
@@ -281,7 +281,7 @@ namespace DGraphics.Dissipation.Simple
     #region Parameter Class
 
     [Serializable]
-    public class SimpleMeshDissipationAnimParams : IDisposable, IAnimParams
+    public class SimpleMeshDissipationAnimParams : IDisposable
     {
         public enum SimulationMode
         {
@@ -450,38 +450,6 @@ namespace DGraphics.Dissipation.Simple
         {
             DisplacementRandomSeed = UnityEngine.Random.Range(0, 255);
         }
-        
-        #region IAnimParams Implementation
-        int IAnimParams.GlobalSimulationMode  => (int)GlobalSimulationMode;
-        Vector3 IAnimParams.BaseDirection => BaseDirection;
-        int IAnimParams.DirectionSimulationMode => (int)DirectionSimulationMode;
-        bool IAnimParams.EnableRandomDirection => EnableRandomDirection;
-        float IAnimParams.RandomAngleRange => RandomAngleRange;
-        int IAnimParams.SpeedMode => (int)SpeedMode;
-        float IAnimParams.ConstantSpeed => ConstantSpeed;
-        float IAnimParams.MinSpeed => MinSpeed;
-        float IAnimParams.MaxSpeed => MaxSpeed;
-        int IAnimParams.SpeedCurveSampleCount => SpeedCurveSampleCount;
-        bool IAnimParams.EnableRandomLifeTime => EnableRandomLifeTime;
-        float IAnimParams.LifeTime => LifeTime;
-        float IAnimParams.MinLifeTime => MinLifeTime;
-        float IAnimParams.MaxLifeTime => MaxLifeTime;
-        int IAnimParams.StartTimeMode => (int)StartTimeMode;
-        float IAnimParams.MaxStartTime => MaxStartTime;
-        float IAnimParams.BaseMaxStartTime => BaseMaxStartTime;
-        float IAnimParams.RandomStartTimeRange => RandomStartTimeRange;
-        int IAnimParams.DirectionRandomSeed => DirectionRandomSeed;
-        int IAnimParams.SpeedRandomSeed => SpeedRandomSeed;
-        int IAnimParams.LifeTimeRandomSeed => LifeTimeRandomSeed;
-        int IAnimParams.StartTimeRandomSeed => StartTimeRandomSeed;
-        bool IAnimParams.EnableProcessDisplacement => EnableProcessDisplacement;
-        float IAnimParams.MaxDisplacementAmplitude => MaxDisplacementAmplitude;
-        float IAnimParams.MinDisplacementFrequency => MinDisplacementFrequency;
-        float IAnimParams.MaxDisplacementFrequency => MaxDisplacementFrequency;
-        int IAnimParams.DisplacementWaveCount => DisplacementWaveCount;
-        int IAnimParams.DisplacementRandomSeed => DisplacementRandomSeed;
-        #endregion
-        
         public ComputeBuffer SpeedCurveBuffer { get; private set; }
         public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; }
 
