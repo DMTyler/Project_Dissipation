@@ -499,7 +499,7 @@ namespace DGraphics.Dissipation
             DisplacementRandomSeed = UnityEngine.Random.Range(0, 255);
         }
         public ComputeBuffer SpeedCurveBuffer { get; private set; }
-        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; }
+        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; } = new List<RenderTexture>();
 
         private void GenerateGreyMapTextureComputeBuffers()
         {
@@ -509,6 +509,12 @@ namespace DGraphics.Dissipation
             }
             
             var bufferList = new List<RenderTexture>();
+
+            if (StartTimeMode != AnimStartTimeMode.RandomBasedOnGreyMap)
+            {
+                GreyMapRTs = bufferList;
+                return;
+            }
             
             for (var i = 0; i < MeshNames.Count; i++)
             {
@@ -600,7 +606,9 @@ namespace DGraphics.Dissipation
             SpeedCurveBuffer.SetData(SpeedCurveSums);
             if (BaseDirection.magnitude == 0) BaseDirection = Vector3.right;
             BaseDirection = BaseDirection.normalized;
-            GenerateGreyMapTextureComputeBuffers();
+            
+            if (StartTimeMode == AnimStartTimeMode.RandomBasedOnGreyMap)
+                GenerateGreyMapTextureComputeBuffers();
         }
 
         public void SetMeshNames(List<string> meshNames)

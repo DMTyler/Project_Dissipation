@@ -8,7 +8,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace DGraphics.Dissipation.Simple
 { 
-    public class MeshDissipationController 
+    public class SimpleMeshDissipationController 
     {
         private static List<(
             VertexAttribute attribute,

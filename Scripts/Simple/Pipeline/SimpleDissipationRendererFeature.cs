@@ -4,7 +4,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace DGraphics.Dissipation.Simple
 {
-    public class DissipationRendererFeature : ScriptableRendererFeature
+    public class SimpleDissipationRendererFeature : ScriptableRendererFeature
     {
         private DissipationRendererPass _pass;
 
@@ -19,7 +19,7 @@ namespace DGraphics.Dissipation.Simple
                 {
                     using (new ProfilingScope(cmd, _profilingSampler))
                     {
-                        MeshDissipationController.InjectCommand(cmd, context, ref renderingData);
+                        SimpleMeshDissipationController.InjectCommand(cmd, context, ref renderingData);
                     }
                 }
                 finally

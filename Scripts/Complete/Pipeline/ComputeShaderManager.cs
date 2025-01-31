@@ -26,12 +26,15 @@ namespace DGraphics.Dissipation
             var findResult = FindObjectOfType<ComputeShaderManager>();
             if (findResult != null)
             {
-                DontDestroyOnLoad(findResult.gameObject);
+                if (Application.isPlaying)
+                    DontDestroyOnLoad(findResult.gameObject);
                 return findResult;
             }
             var go = new GameObject("ComputeShaderManager");
-            DontDestroyOnLoad(go);
-            return _instance;
+            if (Application.isPlaying)
+                DontDestroyOnLoad(go);
+            var instance = go.AddComponent<ComputeShaderManager>();
+            return instance;
         }
     }
 

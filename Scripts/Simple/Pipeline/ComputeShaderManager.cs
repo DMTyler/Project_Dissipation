@@ -30,8 +30,10 @@ namespace DGraphics.Dissipation.Simple
                 return findResult;
             }
             var go = new GameObject("ComputeShaderManager");
-            DontDestroyOnLoad(go);
-            return _instance;
+            if (Application.isPlaying)
+                DontDestroyOnLoad(go);
+            var instance = go.AddComponent<ComputeShaderManager>();
+            return instance;
         }
     }
 

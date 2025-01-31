@@ -66,7 +66,7 @@ namespace DGraphics.Dissipation.Simple
                     continue;
                 }
                 // Check if vertices attributes satisfy the requirements
-                if (!MeshDissipationController.SatisfyVertexAttributes(mesh, out var error))
+                if (!SimpleMeshDissipationController.SatisfyVertexAttributes(mesh, out var error))
                 {
                     Debug.LogError($"Mesh Attributes Requirement Not Satisfied. " +
                                    $"Did you forget to decompose mesh with {nameof(SimpleMeshDecomposer)} first before setup? \n" +
@@ -77,7 +77,7 @@ namespace DGraphics.Dissipation.Simple
                 // Retrieve vertex data
                 mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
                 var vertexBuffer = mesh.GetVertexBuffer(0);
-                var dataArray = new MeshDissipationController.VertexData[mesh.vertexCount];
+                var dataArray = new SimpleMeshDissipationController.VertexData[mesh.vertexCount];
                 vertexBuffer.GetData(dataArray);
                 var initialPos = new List<Vector3>();
                 
@@ -108,7 +108,7 @@ namespace DGraphics.Dissipation.Simple
                 _meshFilters.Select(m => m.transform).ToList(),
                 animParams);
             
-            if (!MeshDissipationController.Register(_info, out var error2))
+            if (!SimpleMeshDissipationController.Register(_info, out var error2))
             {
                 Debug.LogError("Failed to register MeshDissipationController.\n" +
                                $"Error message: {error2}");
@@ -128,7 +128,7 @@ namespace DGraphics.Dissipation.Simple
             {
                 _info.Reset();
                 _info.Stop();
-                MeshDissipationController.Unregister(_info);
+                SimpleMeshDissipationController.Unregister(_info);
                 _info.Dispose();
                 _info = null;
             }
@@ -451,7 +451,7 @@ namespace DGraphics.Dissipation.Simple
             DisplacementRandomSeed = UnityEngine.Random.Range(0, 255);
         }
         public ComputeBuffer SpeedCurveBuffer { get; private set; }
-        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; }
+        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; } = new List<RenderTexture>();
 
         private void GenerateGreyMapTextureComputeBuffers()
         {
@@ -461,6 +461,12 @@ namespace DGraphics.Dissipation.Simple
             }
             
             var bufferList = new List<RenderTexture>();
+
+            if (StartTimeMode != AnimStartTimeMode.RandomBasedOnGreyMap)
+            {
+                GreyMapRTs = new List<RenderTexture>();
+                return;
+            }
             
             for (var i = 0; i < MeshNames.Count; i++)
             {
