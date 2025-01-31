@@ -71,15 +71,15 @@ namespace DGraphics.Dissipation
             public static int ObjectToWorldMat = Shader.PropertyToID("ObjectToWorldMat");
             public static int WorldToObjectMat = Shader.PropertyToID("WorldToObjectMat");
             # endregion
-            public static void SetAnimParams(SimpleMeshDissipationSetter.MeshDissipationAnimParams animParams, CommandBuffer cmd, ComputeShader cs,
+            public static void SetAnimParams(MeshDissipationAnimParams animParams, CommandBuffer cmd, ComputeShader cs,
                 int kernelID)
             {
-                cmd.SetComputeIntParam(cs, GlobalSimulationMode, animParams.GlobalSimulationMode);
+                cmd.SetComputeIntParam(cs, GlobalSimulationMode, (int)animParams.GlobalSimulationMode);
                 cmd.SetComputeVectorParam(cs, BaseDirection, animParams.BaseDirection);
-                cmd.SetComputeIntParam(cs, DirectionSimulationMode, animParams.DirectionSimulationMode);
+                cmd.SetComputeIntParam(cs, DirectionSimulationMode, (int)animParams.DirectionSimulationMode);
                 cmd.SetComputeIntParam(cs, EnableRandomAngle, animParams.EnableRandomDirection ? 1 : 0);
                 cmd.SetComputeFloatParam(cs, RandomAngleRange, animParams.RandomAngleRange);
-                cmd.SetComputeIntParam(cs, SpeedMode, animParams.SpeedMode);
+                cmd.SetComputeIntParam(cs, SpeedMode, (int)animParams.SpeedMode);
                 cmd.SetComputeFloatParam(cs, Speed, animParams.ConstantSpeed);
                 cmd.SetComputeFloatParam(cs, MinSpeed, animParams.MinSpeed);
                 cmd.SetComputeFloatParam(cs, MaxSpeed, animParams.MaxSpeed);
@@ -89,7 +89,7 @@ namespace DGraphics.Dissipation
                 cmd.SetComputeFloatParam(cs, LifeTime, animParams.LifeTime);
                 cmd.SetComputeFloatParam(cs, MinLifeTime, animParams.MinLifeTime);
                 cmd.SetComputeFloatParam(cs, MaxLifeTime, animParams.MaxLifeTime);
-                cmd.SetComputeIntParam(cs, StartTimeMode, animParams.StartTimeMode);
+                cmd.SetComputeIntParam(cs, StartTimeMode, (int)animParams.StartTimeMode);
                 cmd.SetComputeFloatParam(cs, MaxStartTime, animParams.MaxStartTime);
                 cmd.SetComputeFloatParam(cs, BaseMaxStartTime, animParams.BaseMaxStartTime);
                 cmd.SetComputeFloatParam(cs, RandomStartTimeRange, animParams.RandomStartTimeRange);
@@ -254,7 +254,7 @@ namespace DGraphics.Dissipation
         public readonly IReadOnlyList<int> VertexCounts;
         public readonly IReadOnlyList<Transform> Transforms;
         
-        public readonly IAnimParams AnimParams;
+        public readonly MeshDissipationAnimParams AnimParams;
         
         public readonly List<ComputeBuffer> ObjectToWorldOnStartBuffers = new();
         public readonly List<ComputeBuffer> IsStartedBuffers = new();
@@ -271,7 +271,7 @@ namespace DGraphics.Dissipation
         {
             var lifeTime = AnimParams.EnableRandomLifeTime? AnimParams.MaxLifeTime : AnimParams.LifeTime;
 
-            if (AnimParams.StartTimeMode == (int)MeshDissipationAnimParams.AnimStartTimeMode.RandomUnderConstant)
+            if (AnimParams.StartTimeMode == MeshDissipationAnimParams.AnimStartTimeMode.RandomUnderConstant)
                 lifeTime += AnimParams.MaxStartTime;
             else
                 lifeTime += (AnimParams.BaseMaxStartTime + AnimParams.RandomStartTimeRange);
@@ -327,7 +327,7 @@ namespace DGraphics.Dissipation
             IReadOnlyList<GraphicsBuffer> vertexBuffers, 
             IReadOnlyList<int> vertexCounts,
             IReadOnlyList<Transform> transforms,
-            IAnimParams animParams
+            MeshDissipationAnimParams animParams
             )
         {
             this.MeshCount = MeshCount;

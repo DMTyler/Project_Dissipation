@@ -283,7 +283,7 @@ namespace DGraphics.Dissipation
     #region Parameter Class
 
     [Serializable]
-    public class MeshDissipationAnimParams : IDisposable, IAnimParams
+    public class MeshDissipationAnimParams : IDisposable
     {
         public enum SimulationMode
         {
