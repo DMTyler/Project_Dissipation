@@ -461,19 +461,14 @@ namespace DGraphics.Dissipation.Simple
             }
             
             var bufferList = new List<RenderTexture>();
-
-            if (StartTimeMode != AnimStartTimeMode.RandomBasedOnGreyMap)
-            {
-                GreyMapRTs = new List<RenderTexture>();
-                return;
-            }
             
             for (var i = 0; i < MeshNames.Count; i++)
             {
                 var greyMap = Texture2D.blackTexture;
                 if (i >= GreyMapTextures.Count || GreyMapTextures[i] == null)
                 {
-                    Debug.LogWarning($"Mesh {MeshNames[i]} has no grey map texture. Black texture will be used.");
+                    if (StartTimeMode == AnimStartTimeMode.RandomBasedOnGreyMap) 
+                        Debug.LogWarning($"Mesh {MeshNames[i]} has no grey map texture. Black texture will be used.");
                 }
                 else
                 {

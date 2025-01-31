@@ -509,19 +509,14 @@ namespace DGraphics.Dissipation
             }
             
             var bufferList = new List<RenderTexture>();
-
-            if (StartTimeMode != AnimStartTimeMode.RandomBasedOnGreyMap)
-            {
-                GreyMapRTs = bufferList;
-                return;
-            }
             
             for (var i = 0; i < MeshNames.Count; i++)
             {
                 var greyMap = Texture2D.blackTexture;
                 if (i >= GreyMapTextures.Count || GreyMapTextures[i] == null)
                 {
-                    Debug.LogWarning($"Mesh {MeshNames[i]} has no grey map texture. Black texture will be used.");
+                    if (StartTimeMode == AnimStartTimeMode.RandomBasedOnGreyMap)
+                        Debug.LogWarning($"Mesh {MeshNames[i]} has no grey map texture. Black texture will be used.");
                 }
                 else
                 {
@@ -606,9 +601,7 @@ namespace DGraphics.Dissipation
             SpeedCurveBuffer.SetData(SpeedCurveSums);
             if (BaseDirection.magnitude == 0) BaseDirection = Vector3.right;
             BaseDirection = BaseDirection.normalized;
-            
-            if (StartTimeMode == AnimStartTimeMode.RandomBasedOnGreyMap)
-                GenerateGreyMapTextureComputeBuffers();
+            GenerateGreyMapTextureComputeBuffers();
         }
 
         public void SetMeshNames(List<string> meshNames)
