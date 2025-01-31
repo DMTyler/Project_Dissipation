@@ -26,13 +26,13 @@ namespace DGraphics.Dissipation.Simple
       {
          if (_decomposeCS == null)
          {
-            _decomposeCS = ComputeShaderManager.Instance.MeshDecomposer;
-
-            if (_decomposeCS == null)
+            if (ComputeShaderManager.Instance.MeshDecomposer == null)
             {
                Debug.LogError("Set Up Not Complete in ComputeShaderManager: MeshDecomposer not found.");
                return;
             }
+            
+            _decomposeCS = ComputeShaderManager.Instance.MeshDecomposer;
          }
          
          if (_meshFilters.Count == 0)
