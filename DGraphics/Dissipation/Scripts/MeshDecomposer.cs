@@ -1,27 +1,25 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
-using DGraphics.Dissipation.Inspector;
 
-namespace DGraphics.Dissipation.Simple
+namespace DGraphics.Dissipation
 {
    /// <summary>
    /// Divide mesh into triangles, calculate the Middle points of triangles and write them into UV7
    /// </summary>
    [RequireComponent(typeof(MeshFilter))]
-   public class SimpleMeshDecomposer : MonoBehaviour
+   public class MeshDecomposer : MonoBehaviour
    {
       #region Params
 
-      [SerializeField, LabelText("Mesh Filters")] private List<MeshFilter> _meshFilters;
-      [SerializeField, LabelText("Divided or not"), ReadOnly] private bool _divided = false;
+      [SerializeField] private List<MeshFilter> _meshFilters;
+      [SerializeField] private bool _divided = false;
       private ComputeShader _decomposeCS;
 
       #endregion
 
       #region Button Functions
-      [Button("Calculate")]
       public void Calculate()
       {
          if (_decomposeCS == null)

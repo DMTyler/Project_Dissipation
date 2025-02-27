@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Sirenix.OdinInspector;
-using Sirenix.Utilities;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 
 namespace DGraphics.Dissipation
@@ -14,49 +13,72 @@ namespace DGraphics.Dissipation
     /// Setup transformation of vertices
     /// </summary>
     [ExecuteAlways]
-    [RequireComponent(typeof(MeshFilter), typeof(MeshDecomposer))]
     public class MeshDissipationSetter : MonoBehaviour
     {
         #region Animation Params
-        [UnityEngine.Header("Animation Params"), LabelText("Animation Params")]
         public MeshDissipationAnimParams AnimParams = new();
         #endregion
 
         #region Other Params
         
-        [Space(10), Header("Other Params")]
-        [SerializeField, LabelText("Mesh Filters")] private List<MeshFilter> _meshFilters = new();
+        [Serializable]
+        public struct MeshTransformPair
+        {
+            public Mesh Mesh;
+            public Transform Transform;
+        }
+        
+        [SerializeField] private List<MeshTransformPair> _meshTransformPair = new();
         #endregion
         
         #region Fields
 
         private bool _initialized;
+        public bool Initialized => _initialized;
         private MeshDissipationInfo _info;
 
         #endregion
         
         #region Button Functions
-        
-        [Button("Select All Meshes")]
-        private void SelectAllMeshes()
+        public void SelectAllMeshes()
         {
-            _meshFilters = GetComponentsInChildren<MeshFilter>().ToList();
+            _meshTransformPair.AddRange(GetComponentsInChildren<MeshFilter>().Select(f => new MeshTransformPair
+            {
+                Mesh = f.sharedMesh,
+                Transform = f.transform
+            }).Where(p => !_meshTransformPair.Select(x => x.Mesh).Contains(p.Mesh)));
+            
+            _meshTransformPair.AddRange(GetComponentsInChildren<SkinnedMeshRenderer>().Select(r => new MeshTransformPair
+            {
+                Mesh = r.sharedMesh,
+                Transform = r.transform
+            }).Where(p => !_meshTransformPair.Select(x => x.Mesh).Contains(p.Mesh)));
         }
-
-        [Button("Initialize")]
+        
         public void Setup()
         {
             _isStarted = false;
             _isPaused = false;
-            
-            var meshes = _meshFilters.Select(x => x.sharedMesh).ToList();
+
+            var meshes = _meshTransformPair.Select(x => x.Mesh).ToList();
             if (meshes.Count == 0)
             {
                 Debug.LogError($"Null Mesh List for Script: {nameof(MeshDissipationSetter)}");
                 return;
             }
             
-            var buffers = new List<GraphicsBuffer>();
+            var vertexBuffers = new List<GraphicsBuffer>();
+            var vertexStrides = new List<int>();
+            var vertexOffsets = new List<int>();
+            
+            var uv6Buffers = new List<GraphicsBuffer>();
+            var uv6Strides = new List<int>();
+            var uv6Offsets = new List<int>();
+            
+            var uv7Buffers = new List<GraphicsBuffer>();
+            var uv7Strides = new List<int>();
+            var uv7Offsets = new List<int>();
+            
             var counts = new List<int>();
             var initialPositionBuffers = new List<ComputeBuffer>();
 
@@ -67,6 +89,7 @@ namespace DGraphics.Dissipation
                     Debug.LogError($"Mesh {mesh.name} is not readable. Please enable Read/Write in the import settings.");
                     continue;
                 }
+                
                 // Check if vertices attributes satisfy the requirements
                 if (!MeshDissipationController.SatisfyVertexAttributes(mesh, out var error))
                 {
@@ -77,40 +100,88 @@ namespace DGraphics.Dissipation
                 }
 
                 // Retrieve vertex data
-                mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
-                var vertexBuffer = mesh.GetVertexBuffer(0);
-                var dataArray = new MeshDissipationController.VertexData[mesh.vertexCount];
-                vertexBuffer.GetData(dataArray);
-                var initialPos = new List<Vector3>();
+                if (!MeshDissipationController.TryGetGraphicsBuffer(mesh, VertexAttribute.Position,
+                        out var vertexBuffer, out var vertexStride, out var vertexOffset) ||
+                    !MeshDissipationController.TryGetGraphicsBuffer(mesh, VertexAttribute.TexCoord6, 
+                        out var uv6Buffer, out var uv6Stride, out var uv6Offset) ||
+                    !MeshDissipationController.TryGetGraphicsBuffer(mesh, VertexAttribute.TexCoord7, 
+                        out var uv7Buffer, out var uv7Stride, out var uv7Offset))
+                {
+                    Debug.LogError($"Mesh {mesh.name} does not have required attributes. ");
+                    return;
+                }
+                
+                Debug.Log($"Position Stride: {vertexStride}, Position Offset: {vertexOffset}, \n" +
+                          $"UV6 Stride: {uv6Stride}, UV6 Offset: {uv6Offset}, \n" +
+                          $"UV7 Stride: {uv7Stride}, UV7 Offset: {uv7Offset}");
                 
                 // Retrieve initial position data
-                foreach (var data in dataArray)
+                var vertexCount = mesh.vertexCount;
+                var bufferData = new byte[vertexCount * vertexStride];
+                vertexBuffer.GetData(bufferData);
+                
+                var initialPos = new Vector3[vertexCount];
+                for (var i = 0; i < vertexCount; i++)
                 {
-                    initialPos.Add(data.position);
+                    var byteIndex = i * vertexStride + vertexOffset;
+                    var position = new Vector3(
+                        BitConverter.ToSingle(bufferData, byteIndex),
+                        BitConverter.ToSingle(bufferData, byteIndex + 4),
+                        BitConverter.ToSingle(bufferData, byteIndex + 8));
+                    initialPos[i] = position;
                 }
 
-                var buffer = new ComputeBuffer(mesh.vertexCount, sizeof(float) * 3, ComputeBufferType.Default);
-                buffer.SetData(initialPos);
+                var initialPositionBuffer = new ComputeBuffer(mesh.vertexCount, sizeof(float) * 3, ComputeBufferType.Default);
+                initialPositionBuffer.SetData(initialPos);
                 
-                initialPositionBuffers.Add(buffer);
-                buffers.Add(vertexBuffer);
+                initialPositionBuffers.Add(initialPositionBuffer);
+                vertexBuffers.Add(vertexBuffer);
+                
+                // The same GraphicsBuffer can only be bound to the same ByteAddressBuffer.
+                // Considering that UV6 and UV7 are read-only,
+                // we can use copying instead.
+                uv6Buffers.Add(uv6Buffer.Copy()); 
+                uv7Buffers.Add(uv7Buffer.Copy());
+                
+                vertexStrides.Add(vertexStride);
+                uv6Strides.Add(uv6Stride);
+                uv7Strides.Add(uv7Stride);
+                
+                vertexOffsets.Add(vertexOffset);
+                uv6Offsets.Add(uv6Offset);
+                uv7Offsets.Add(uv7Offset);
+                
                 counts.Add(mesh.vertexCount);
+                
+                uv6Buffer.Dispose();
+                uv7Buffer.Dispose();
             }
 
-            AnimParams.Init();
             AnimParams.SetMeshNames(meshes.Select(x => x.name).ToList());
+            AnimParams.Init();
             
             var animParams = AnimParams;
             
             _info = new MeshDissipationInfo(
                 meshes.Count, 
                 initialPositionBuffers, 
-                buffers, 
+                
+                vertexBuffers, 
+                vertexStrides, 
+                vertexOffsets, 
+                
+                uv6Buffers, 
+                uv6Strides, 
+                uv6Offsets, 
+                
+                uv7Buffers, 
+                uv7Strides, 
+                uv7Offsets, 
                 counts, 
-                _meshFilters.Select(m => m.transform).ToList(),
+                _meshTransformPair.Select(m => m.Transform).ToList(),
                 animParams);
             
-            if (!MeshDissipationController.Register(_info, out var error2))
+            if (!this.Register(_info, out var error2))
             {
                 Debug.LogError("Failed to register MeshDissipationController.\n" +
                                $"Error message: {error2}");
@@ -120,8 +191,7 @@ namespace DGraphics.Dissipation
             _initialized = true;
             
         }
-
-        [Button("Reset")]
+        
         public void Reset()
         {
             _isStarted = false;
@@ -130,7 +200,7 @@ namespace DGraphics.Dissipation
             {
                 _info.Reset();
                 _info.Stop();
-                MeshDissipationController.Unregister(_info);
+                this.Unregister(_info);
                 _info.Dispose();
                 _info = null;
             }
@@ -141,8 +211,8 @@ namespace DGraphics.Dissipation
         #region Animation Functions
         
         private bool _isStarted;
+        public bool IsStarted => _isStarted;
         private bool Startable() => (_initialized && !_isStarted);
-        [Button("Start"), Sirenix.OdinInspector.ShowIf("_initialized"), EnableIf(nameof(Startable)), ButtonGroup("Anim")]
         public void StartAnim()
         {
             if (!_initialized)
@@ -167,8 +237,8 @@ namespace DGraphics.Dissipation
         }
         
         private bool _isPaused;
+        public bool IsPaused => _isPaused;
         private bool Pauseable() => _initialized && _isStarted && !_isPaused;
-        [Button("Pause"), EnableIf(nameof(Pauseable)), Sirenix.OdinInspector.ShowIf(nameof(Pauseable), false), ButtonGroup("Anim")]
         public void PauseAnim()
         {
             if (!_initialized)
@@ -192,9 +262,7 @@ namespace DGraphics.Dissipation
             _isPaused = true;
         }
         
-        
         private bool Continuable() => _initialized && _isStarted && _isPaused;
-        [Button("Continue"), EnableIf(nameof(Continuable)), Sirenix.OdinInspector.ShowIf(nameof(Continuable), false), ButtonGroup("Anim")]
         public void ContinueAnim()
         {
             if (!_initialized)
@@ -217,11 +285,9 @@ namespace DGraphics.Dissipation
             _info.Start();
             _isPaused = false;
         }
-
         
         private bool Stoppable() => _initialized && _isStarted;
-        [Button("Stop"), EnableIf(nameof(Stoppable)), ShowIf("_initialized"), ButtonGroup("Anim")]
-        private void StopAnim()
+        public void StopAnim()
         {
             if (!_initialized)
             {
@@ -260,7 +326,6 @@ namespace DGraphics.Dissipation
                                    $"GameObject: {gameObject.name}");
                     return;
                 }
-
                 _info.Update();
             }
                 
@@ -272,6 +337,12 @@ namespace DGraphics.Dissipation
         }
 
         private void OnDisable()
+        {
+            Reset();
+            AnimParams?.Dispose();
+        }
+        
+        private void OnDestroy()
         {
             Reset();
             AnimParams?.Dispose();
@@ -290,26 +361,11 @@ namespace DGraphics.Dissipation
             World = 1,
             Object = 2,
         }
-        
-        [Header("Basic Settings")]
-        [LabelText("Global Simulation Mode")]
+
         public SimulationMode GlobalSimulationMode = SimulationMode.World;
-        
-        [Space(8)]
-        [LabelText("Direction")]
-        [OnValueChanged(nameof(Init))]
         public Vector3 BaseDirection = new Vector3(1, 0, 0);
-        
-        [LabelText("Direction Simulation Mode")]
-        [OnValueChanged(nameof(Init))]
         public SimulationMode DirectionSimulationMode = SimulationMode.World;
-        
-        [LabelText("Enable Random Direction")]
-        [OnValueChanged(nameof(Init))]
         public bool EnableRandomDirection;
-        
-        [Range(0, 180), LabelText("Max Random Angle"), ShowIf("EnableRandomDirection")] 
-        [OnValueChanged(nameof(Init))]
         public float RandomAngleRange = 45f;
         
         public enum AnimSpeedMode
@@ -319,47 +375,17 @@ namespace DGraphics.Dissipation
             Curve = 3,
         }
         
-        [Space(8)]
-        [LabelText("Speed Mode")]
-        [OnValueChanged(nameof(Init))]
         public AnimSpeedMode SpeedMode = AnimSpeedMode.Constant;
-
-        [ShowIf("SpeedMode", AnimSpeedMode.Constant)]
-        [Min(0), LabelText("Speed")]
-        [OnValueChanged(nameof(Init))]
         public float ConstantSpeed = 1f;
-
-        [ShowIf("SpeedMode", AnimSpeedMode.RandomBetweenTwoConstants)]
-        [BoxGroup("Speed Range"), Min(0), LabelText("Min Velocity")]
-        [OnValueChanged(nameof(Init))]
         public float MinSpeed = 1f;
-        
-        [ShowIf("SpeedMode", AnimSpeedMode.RandomBetweenTwoConstants)]
-        [BoxGroup("Speed Range"), Min(0), LabelText("Max Velocity")]
-        [OnValueChanged(nameof(Init))]
         public float MaxSpeed = 1f;
-
-        [ShowIf("SpeedMode", AnimSpeedMode.Curve)]
-        [OnValueChanged(nameof(Init))]
-        [LabelText("Speed Curve")]
         public AnimationCurve SpeedCurve = AnimationCurve.Linear(0, 1, 1, 1);
         
-        [Space(8)]
-        [LabelText("Enable Random Lifetime")]
-        [OnValueChanged(nameof(Init))]
         public bool EnableRandomLifeTime;
         
         private bool _enableConstantLifeTime => !EnableRandomLifeTime;
-        [LabelText("Lifetime"), ShowIf("_enableConstantLifeTime"), Min(0.01f)]
-        [OnValueChanged(nameof(Init))]
         public float LifeTime = 1f;
-        
-        [BoxGroup("Lifetime Range"), LabelText("Min Lifetime"), ShowIf("EnableRandomLifeTime")]
-        [OnValueChanged(nameof(Init)), Min(0.01f)]
         public float MinLifeTime = 1f;
-        
-        [BoxGroup("lifetime Range"), LabelText("Max Lifetime"), ShowIf("EnableRandomLifeTime")]
-        [OnValueChanged(nameof(Init)), Min(0.01f)]
         public float MaxLifeTime = 1f;
 
         public enum AnimStartTimeMode
@@ -367,145 +393,61 @@ namespace DGraphics.Dissipation
             RandomUnderConstant = 1,
             RandomBasedOnGreyMap = 2,
         }
-
-        [Space(8)] [LabelText("Starting Time Mode")] 
-        [OnValueChanged(nameof(Init))]
-        public AnimStartTimeMode StartTimeMode = AnimStartTimeMode.RandomUnderConstant;
         
-        [LabelText("Max Starting Time"), ShowIf("StartTimeMode", AnimStartTimeMode.RandomUnderConstant), Min(0)]
-        [OnValueChanged(nameof(Init))]
+        public AnimStartTimeMode StartTimeMode = AnimStartTimeMode.RandomUnderConstant;
         public float MaxStartTime = 1f;
-
         private bool MeshNameLengthValid() => MeshNames.Count != 0;
         private bool GreyMapLengthValid() => MeshNames.Count == GreyMapTextures.Count || MeshNames.Count == 0;
-        [LabelText("Grey Map"), ShowIf("StartTimeMode", AnimStartTimeMode.RandomBasedOnGreyMap)]
-        [ValidateInput(nameof(MeshNameLengthValid), "Mesh is null. Please initialize first.")]
-        [ValidateInput(nameof(GreyMapLengthValid), "Grey map count does not match mesh count.", InfoMessageType.Warning)]
-        [OnValueChanged(nameof(Init))]
         public List<Texture2D> GreyMapTextures = new();
-        
-        [LabelText("Base Max Starting Time"), ShowIf("StartTimeMode", AnimStartTimeMode.RandomBasedOnGreyMap), Min(0)]
-        [OnValueChanged(nameof(Init))]
         public float BaseMaxStartTime = 1f;
-        
-        [LabelText("Random Start Time Range"), ShowIf("StartTimeMode", AnimStartTimeMode.RandomBasedOnGreyMap), Min(0)]
-        [OnValueChanged(nameof(Init))]
         public float RandomStartTimeRange = 0.1f;
         
-        [Space(8)]
-        [LabelText("Enable Process Displacement")]
-        [OnValueChanged(nameof(Init))]
         public bool EnableProcessDisplacement;
-        
-        [LabelText("Max Displacement Amplitude"), ShowIf("EnableProcessDisplacement"), Min(0.01f)]
-        [OnValueChanged(nameof(Init))]
         public float MaxDisplacementAmplitude = 0.1f;
         
-        [Space(8)]
-        [FoldoutGroup("Advanced Settings", expanded: false)] 
-        [LabelText("Mesh Names"), ReadOnly, Tooltip("Debug Only. If null or not the same as the context, initialization may fail, please reinitialize.")]
         public List<string> MeshNames = new();
-
-        [Space(8)]
-        [FoldoutGroup("Advanced Settings")] 
-        [OnValueChanged(nameof(Init))]
-        [LabelText("Curve Sample Count Per Sec"), Range(1, 240)] 
-        [Tooltip("If the curve is relatively complex or if the curve parameters deviate significantly from the actual performance, try increasing this value.")]
         public int CurveSampleCountPerSecond = 30;
-
-        [ShowIf("SpeedMode", AnimSpeedMode.Curve)]
-        [FoldoutGroup("Advanced Settings"), ReadOnly, LabelText("Total Sample Count")]
         public int SpeedCurveSampleCount;
-        
-        [ShowIf("SpeedMode", AnimSpeedMode.Curve)]
-        [FoldoutGroup("Advanced Settings"), ReadOnly, LabelText("Speed Curve Sums")]
         public List<float> SpeedCurveSums = new();
 
         private static int[] GreyMapResolutions = { 128, 256, 512, 1024 };
-        [Space(8)] 
-        [FoldoutGroup("Advanced Settings"), ShowIf("StartTimeMode", AnimStartTimeMode.RandomBasedOnGreyMap)] 
-        [LabelText("Grey Map Resolution")]
-        [ValueDropdown("GreyMapResolutions")]
-        [OnValueChanged(nameof(Init))]
         public int GreyMapResolution = 128;
-        
-        [Space(8)]
-        [FoldoutGroup("Advanced Settings"), ShowIf("EnableProcessDisplacement"), LabelText("Displacement Wave Count"), Min(1)]
         public int DisplacementWaveCount = 4;
-        
-        [BoxGroup("Advanced Settings/Displacement Wave Frequency")]
-        [ShowIf("EnableProcessDisplacement"), LabelText("Min Displacement Frequency"), Min(0.01f)]
         public float MinDisplacementFrequency = 0.5f;
-        
-        [BoxGroup("Advanced Settings/Displacement Wave Frequency")]
-        [ShowIf("EnableProcessDisplacement"), LabelText("Max Displacement Frequency"), Min(0.01f)]
         public float MaxDisplacementFrequency = 1f;
-        
-        [Space(8)]
-        [HorizontalGroup("Advanced Settings/Direction Random Seed")]
-        [LabelText("Direction Random Seed"), ShowIf("EnableRandomDirection"), Range(0, 255)]
         public int DirectionRandomSeed = 42;
-
-        [HorizontalGroup("Advanced Settings/Direction Random Seed")]
-        [Button("Randomize"), ShowIf("EnableRandomDirection")]
         private void GenerateDirRandomSeed()
         {
             DirectionRandomSeed = UnityEngine.Random.Range(0, 255);
         }
-        
-        [HorizontalGroup("Advanced Settings/Speed Random Seed")]
-        [Range(0, 255)]
-        [LabelText("Speed Random Seed"), ShowIf("SpeedMode", AnimSpeedMode.RandomBetweenTwoConstants)]
         public int SpeedRandomSeed = 37;
-
-        [HorizontalGroup("Advanced Settings/Speed Random Seed")]
-        [Button("Randomize"), ShowIf("SpeedMode", AnimSpeedMode.RandomBetweenTwoConstants)]
         private void GenerateSpdRandomSeed()
         {
             SpeedRandomSeed = UnityEngine.Random.Range(0, 255);
         }
-        
-        [HorizontalGroup("Advanced Settings/Lifetime Random Seed")]
-        [LabelText("Lifetime Random Seed"), ShowIf("EnableRandomLifeTime"), Range(0, 255)]
         public int LifeTimeRandomSeed = 128;
-
-        [HorizontalGroup("Advanced Settings/Lifetime Random Seed")]
-        [Button("Randomize"), ShowIf("EnableRandomLifeTime")]
         private void GenerateLTimeRandomSeed()
         {
             LifeTimeRandomSeed = UnityEngine.Random.Range(0, 255); 
         }
-
-        [Space(8)]
-        [HorizontalGroup("Advanced Settings/Starting Time Random Seed")]
-        [LabelText("Starting Time Random Seed"), Range(0, 255)]
         public int StartTimeRandomSeed = 1;
-
-        [HorizontalGroup("Advanced Settings/Starting Time Random Seed")]
-        [Button("Randomize")]
         private void GenerateStTimeRandomSeed()
         {
             StartTimeRandomSeed = UnityEngine.Random.Range(0, 255);
         }
-        
-        [HorizontalGroup("Advanced Settings/Displacement Random Seed")]
-        [LabelText("Displacement Random Seed"), ShowIf("EnableProcessDisplacement"), Range(0, 255)]
         public int DisplacementRandomSeed = 123;
-
-        [HorizontalGroup("Advanced Settings/Displacement Random Seed")]
-        [Button("Randomize"), ShowIf("EnableProcessDisplacement")]
         private void GeneratePDisRandomSeed()
         {
             DisplacementRandomSeed = UnityEngine.Random.Range(0, 255);
         }
         public ComputeBuffer SpeedCurveBuffer { get; private set; }
-        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; } = new List<RenderTexture>();
+        public IReadOnlyList<RenderTexture> GreyMapRTs { get; private set; }
 
         private void GenerateGreyMapTextureComputeBuffers()
         {
             if (GreyMapRTs != null && GreyMapRTs.Count > 0)
             {
-                GreyMapRTs.ForEach(b => b.Release());
+                GreyMapRTs.ToList().ForEach(b => b.Release());
             }
             
             var bufferList = new List<RenderTexture>();
@@ -612,7 +554,7 @@ namespace DGraphics.Dissipation
         public void Dispose()
         {
             SpeedCurveBuffer?.Dispose();
-            GreyMapRTs?.ForEach(b => b.Release());
+            GreyMapRTs?.ToList().ForEach(b => b.Release());
         }
     }
     

@@ -27,22 +27,26 @@ float3 BaseDirection;           // 基础方向向量
 int DirectionSimulationMode;    // 方向模拟模式
 int EnableRandomAngle;          // 是否启用随机角度
 float RandomAngleRange;         // 随机角度范围. 单位: 角度
+
 int SpeedMode;                  // 速度模式
 float Speed;                    // 速度
 float MinSpeed;                 // 最小速度
 float MaxSpeed;                 // 最大速度
 StructuredBuffer<float> SpeedCurveSums;     // 速度曲线离散积分
 int SpeedCurveSampleCount;      // 速度曲线采样数
+
 int EnableRandomLifeTime;       // 是否启用随机生命周期
 float LifeTime;                 // 生命周期
 float MinLifeTime;              // 最小生命周期
 float MaxLifeTime;
+
 int StartTimeMode;              // 起始时间模式
 float MaxStartTime;             // 最大开始时间
 Texture2D<float> GreyMap;              // 开始时间灰度贴图
 SamplerState samplerGreyMap;
 float BaseMaxStartTime;         // 基础最大开始时间
 float RandomStartTimeRange;     // 随机开始时间范围
+
 int EnableProcessDisplacement;  // 过程随机
 float MaxDisplacementAmplitude; // 最大位移幅度
 float MinDisplacementFrequency; // 最小位移频率
@@ -62,7 +66,19 @@ float T;                        // 当前时间
 StructuredBuffer<float3> InitialPositions;          // 初始位置
 RWStructuredBuffer<float4x4> ObjectToWorldOnStart;  // 开始时的变换
 RWStructuredBuffer<int> IsStarted;                  // 是否开始
+
 RWByteAddressBuffer VertexBuffer;                   // 顶点缓冲区
+ByteAddressBuffer UV6Buffer;                        // UV6缓冲区
+ByteAddressBuffer UV7Buffer;                        // UV7缓冲区
+
+int VertexStride;
+int UV6Stride;
+int UV7Stride;
+
+int VertexOffset;
+int UV6Offset;
+int UV7Offset;
+
 
 float3 ObjectToWorld(float3 objPos, int id)
 {
@@ -89,11 +105,11 @@ float3 WorldToObject(float3 worldPos, int id)
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float3 initialPosition = InitialPositions[id.x];
-    float4 middlePointResult = asfloat(VertexBuffer.Load4((id.x + 1) * 56 - 16));
-    float2 middlePointUV = asfloat(VertexBuffer.Load2((id.x + 1) * 56 - 24));
+    float4 middlePointResult = asfloat(UV7Buffer.Load4(id.x * UV7Stride + UV7Offset));
+    float2 middlePointUV = asfloat(UV6Buffer.Load2(id.x * UV6Stride + UV6Offset));
     float3 targetPosition = middlePointResult.xyz;
     int index = middlePointResult.w;
-
+    
     float startTime;
     if (StartTimeMode == START_TIME_MODE_GREY_MAP)
     {
@@ -234,5 +250,5 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         newPosition = WorldToObject(newPosition, id.x);
     }
     
-    VertexBuffer.Store3(id.x * 56, asuint(newPosition));
+    VertexBuffer.Store3(id.x * VertexStride + VertexOffset, asuint(newPosition));
 }

@@ -1,11 +1,25 @@
 #pragma kernel CSMiddlePoint
 #pragma kernel CSDivideTriangles
+#pragma kernel CSDivideSkinnedTriangles
+
+struct BoneWeight
+{
+    int boneIndex0;
+    int boneIndex1;
+    int boneIndex2;
+    int boneIndex3;
+    float weight0;
+    float weight1;
+    float weight2;
+    float weight3;
+};
 
 int TriangleCount;
 StructuredBuffer<int> Triangles;
 StructuredBuffer<float3> Vertices;
 StructuredBuffer<float3> Normals;
 StructuredBuffer<float2> UVs;
+StructuredBuffer<BoneWeight> BoneWeights;
 
 RWStructuredBuffer<float2> CSMiddlePointResultUVs;
 RWStructuredBuffer<float4> CSMiddlePointResult;
@@ -14,9 +28,10 @@ RWStructuredBuffer<float3> CSDivideTrianglesResultNewVertices;
 RWStructuredBuffer<int> CSDivideTrianglesResultNewTriangles;
 RWStructuredBuffer<float2> CSDivideTrianglesResultNewUVs;
 RWStructuredBuffer<float3> CSDivideTrianglesResultNewNormals;
+RWStructuredBuffer<BoneWeight> CSDivideTrianglesResultNewBoneWeights;
 
 
-[numthreads(16, 1, 1)]
+[numthreads(64, 1, 1)]
 void CSMiddlePoint (uint3 id : SV_DispatchThreadID)
 {
     int index = id.x;
@@ -41,7 +56,7 @@ void CSMiddlePoint (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(16, 1, 1)]
+[numthreads(64, 1, 1)]
 void CSDivideTriangles (uint3 id : SV_DispatchThreadID)
 {
     int index = id.x;
@@ -65,3 +80,33 @@ void CSDivideTriangles (uint3 id : SV_DispatchThreadID)
     CSDivideTrianglesResultNewTriangles[index * 3 + 1] = index * 3 + 1;
     CSDivideTrianglesResultNewTriangles[index * 3 + 2] = index * 3 + 2;
 }
+
+[numthreads(64, 1, 1)]
+void CSDivideSkinnedTriangles (uint3 id : SV_DispatchThreadID)
+{
+    int index = id.x;
+    int v0 = Triangles[index * 3 + 0];
+    int v1 = Triangles[index * 3 + 1];
+    int v2 = Triangles[index * 3 + 2];
+    
+    CSDivideTrianglesResultNewVertices[index * 3 + 0] = Vertices[v0];
+    CSDivideTrianglesResultNewVertices[index * 3 + 1] = Vertices[v1];
+    CSDivideTrianglesResultNewVertices[index * 3 + 2] = Vertices[v2];
+
+    CSDivideTrianglesResultNewUVs[index * 3 + 0] = UVs[v0];
+    CSDivideTrianglesResultNewUVs[index * 3 + 1] = UVs[v1];
+    CSDivideTrianglesResultNewUVs[index * 3 + 2] = UVs[v2];
+
+    CSDivideTrianglesResultNewNormals[index * 3 + 0] = Normals[v0];
+    CSDivideTrianglesResultNewNormals[index * 3 + 1] = Normals[v1];
+    CSDivideTrianglesResultNewNormals[index * 3 + 2] = Normals[v2];
+
+    CSDivideTrianglesResultNewTriangles[index * 3 + 0] = index * 3 + 0;
+    CSDivideTrianglesResultNewTriangles[index * 3 + 1] = index * 3 + 1;
+    CSDivideTrianglesResultNewTriangles[index * 3 + 2] = index * 3 + 2;
+
+    CSDivideTrianglesResultNewBoneWeights[index * 3 + 0] = BoneWeights[v0];
+    CSDivideTrianglesResultNewBoneWeights[index * 3 + 1] = BoneWeights[v1];
+    CSDivideTrianglesResultNewBoneWeights[index * 3 + 2] = BoneWeights[v2];
+}
+

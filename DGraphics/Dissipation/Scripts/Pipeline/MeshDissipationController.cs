@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
-using DGraphics.Dissipation.Simple;
 using UnityEditor.Callbacks;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -9,7 +9,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace DGraphics.Dissipation
 { 
-    public class MeshDissipationController 
+    public static class MeshDissipationController
     {
         private static List<(
             VertexAttribute attribute,
@@ -25,6 +25,7 @@ namespace DGraphics.Dissipation
             (VertexAttribute.TexCoord7, VertexAttributeFormat.Float32, 4, 0)
         };
 
+        private static HashSet<MeshDissipationSetter> _setters = new();
         private static List<MeshDissipationInfo> _meshDissipationInfos = new();
         private static int _kernelID = 0;
         
@@ -33,6 +34,9 @@ namespace DGraphics.Dissipation
             # region Shader Property IDs
             public static int T = Shader.PropertyToID("T");
             public static int VertexBuffer = Shader.PropertyToID("VertexBuffer");
+            public static int UV6Buffer = Shader.PropertyToID("UV6Buffer");
+            public static int UV7Buffer = Shader.PropertyToID("UV7Buffer");
+            
             public static int InitialPositions = Shader.PropertyToID("InitialPositions");
             public static int ObjectToWorldOnStart = Shader.PropertyToID("ObjectToWorldOnStart");
             public static int IsStarted = Shader.PropertyToID("IsStarted");
@@ -70,6 +74,15 @@ namespace DGraphics.Dissipation
             
             public static int ObjectToWorldMat = Shader.PropertyToID("ObjectToWorldMat");
             public static int WorldToObjectMat = Shader.PropertyToID("WorldToObjectMat");
+            
+            public static int VertexStride = Shader.PropertyToID("VertexStride");
+            public static int UV6Stride = Shader.PropertyToID("UV6Stride");
+            public static int UV7Stride = Shader.PropertyToID("UV7Stride");
+            
+            public static int VertexOffset = Shader.PropertyToID("VertexOffset");
+            public static int UV6Offset = Shader.PropertyToID("UV6Offset");
+            public static int UV7Offset = Shader.PropertyToID("UV7Offset");
+
             # endregion
             public static void SetAnimParams(MeshDissipationAnimParams animParams, CommandBuffer cmd, ComputeShader cs,
                 int kernelID)
@@ -83,7 +96,7 @@ namespace DGraphics.Dissipation
                 cmd.SetComputeFloatParam(cs, Speed, animParams.ConstantSpeed);
                 cmd.SetComputeFloatParam(cs, MinSpeed, animParams.MinSpeed);
                 cmd.SetComputeFloatParam(cs, MaxSpeed, animParams.MaxSpeed);
-                cmd.SetComputeBufferParam(cs, kernelID, SpeedCurveSums, animParams.SpeedCurveBuffer);
+                cmd.SetComputeBufferParam(cs, kernelID, ShaderTags.SpeedCurveSums, animParams.SpeedCurveBuffer);
                 cmd.SetComputeIntParam(cs, SpeedCurveSampleCount, animParams.SpeedCurveSampleCount);
                 cmd.SetComputeIntParam(cs, EnableRandomLifeTime, animParams.EnableRandomLifeTime ? 1 : 0);
                 cmd.SetComputeFloatParam(cs, LifeTime, animParams.LifeTime);
@@ -105,27 +118,22 @@ namespace DGraphics.Dissipation
                 cmd.SetComputeIntParam(cs, DisplacementRandomSeed, animParams.DisplacementRandomSeed);
             }
         }
-        
-        [StructLayout(LayoutKind.Sequential)]
-        public struct VertexData
-        {
-            public Vector3 position;
-            public Vector3 normal;
-            public Vector2 uv;
-            public Vector2 uv6;
-            public Vector4 uv7;
-        }
-
         public static void InjectCommand(CommandBuffer cmd, ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (_meshDissipationInfos.Count == 0)
             {
                 return;
             }
+            
+            if (ComputeShaderManager.Instance == null)
+            {
+                Debug.LogWarning("Set Up Not Complete for MeshDissipationController: Compute Shader Manager is null.");
+                return;
+            }
 
             if (ComputeShaderManager.Instance.MeshTransformer == null)
             {
-                Debug.LogWarning("Set Up Not Complete in ComputeShaderManager: MeshTransformer is null.");
+                Debug.LogWarning("Set Up Not Complete for MeshDissipationController: Compute Shader Transformer is null.");
                 return;
             }
 
@@ -144,9 +152,33 @@ namespace DGraphics.Dissipation
                 for (var i = 0; i < info.MeshCount; i++)
                 {
                     var positions = info.InitialPositionsBuffers[i];
-                    var buffer = info.VertexBuffers[i];
+                    var vertexBuffer = info.VertexBuffers[i];
+                    var uv6Buffer = info.Uv6Buffers[i];
+                    var uv7Buffer = info.Uv7Buffers[i];
+                    
+                    var vertexStride = info.VertexStrides[i];
+                    var vertexOffset = info.VertexOffsets[i];
+                    
+                    var uv6Stride = info.Uv6Strides[i];
+                    var uv6Offset = info.Uv6Offsets[i];
+                    
+                    var uv7Stride = info.Uv7Strides[i];
+                    var uv7Offset = info.Uv7Offsets[i];
+
                     var objectToWorldOnStartBuffer = info.ObjectToWorldOnStartBuffers[i];
                     var isStartedBuffer = info.IsStartedBuffers[i];
+                    
+                    cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.VertexBuffer , vertexBuffer);
+                    cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.UV6Buffer, uv6Buffer);
+                    cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.UV7Buffer, uv7Buffer);
+                    
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.VertexStride, vertexStride);
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.UV6Stride, uv6Stride);
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.UV7Stride, uv7Stride);
+                    
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.VertexOffset, vertexOffset);
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.UV6Offset, uv6Offset);
+                    cmd.SetComputeIntParam(transformerCS, ShaderTags.UV7Offset, uv7Offset);
                     
                     cmd.SetComputeMatrixParam(transformerCS, ShaderTags.ObjectToWorldMat, info.Transforms[i].localToWorldMatrix);
                     cmd.SetComputeMatrixParam(transformerCS, ShaderTags.WorldToObjectMat, info.Transforms[i].worldToLocalMatrix);
@@ -154,7 +186,6 @@ namespace DGraphics.Dissipation
                     cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.ObjectToWorldOnStart, objectToWorldOnStartBuffer);
                     cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.IsStarted, isStartedBuffer);
                     cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.InitialPositions, positions);
-                    cmd.SetComputeBufferParam(transformerCS, kernel, ShaderTags.VertexBuffer , buffer);
                     
                     var greyMap = info.AnimParams.GreyMapRTs[i];
                     cmd.SetComputeTextureParam(transformerCS, kernel, ShaderTags.GreyMap, greyMap);
@@ -172,7 +203,25 @@ namespace DGraphics.Dissipation
             }
         }
 
-        public static bool Register(MeshDissipationInfo info, out string error)
+        public static ComputeBuffer Copy(this ComputeBuffer buffer)
+        {
+            var data = new byte[buffer.count * buffer.stride];
+            buffer.GetData(data);
+            var newBuffer = new ComputeBuffer(buffer.count, buffer.stride, ComputeBufferType.Raw);
+            newBuffer.SetData(data);
+            return newBuffer;
+        }
+
+        public static GraphicsBuffer Copy(this GraphicsBuffer buffer)
+        {
+            var data = new byte[buffer.count * buffer.stride];
+            buffer.GetData(data);
+            var newBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Raw, buffer.count, buffer.stride);
+            newBuffer.SetData(data);
+            return newBuffer;
+        }
+
+        public static bool Register(this MeshDissipationSetter setter, MeshDissipationInfo info, out string error)
         {
             error = null;
             if (info == null)
@@ -186,15 +235,20 @@ namespace DGraphics.Dissipation
                 error = "Vertex buffer list is empty. ";
                 return false;
             }
+            
+            if (_setters.Contains(setter)) return true;
+            
+            _setters.Add(setter);
             _meshDissipationInfos.Add(info);
             return true;
         }
 
-        public static void Unregister(MeshDissipationInfo info)
+        public static void Unregister(this MeshDissipationSetter setter,MeshDissipationInfo info)
         {
             if (info == null) 
                 return;
             _meshDissipationInfos.Remove(info);
+            _setters.Remove(setter);
         }
 
         public static bool SatisfyVertexAttributes(Mesh mesh, out string error)
@@ -202,12 +256,14 @@ namespace DGraphics.Dissipation
             var satisfied = true;
             error = null;
             var attributes = mesh.GetVertexAttributes();
+            
             for (var i = 0; i < _attributeSequence.Count; i++)
             {
                 if (attributes[i].attribute != _attributeSequence[i].attribute)
                 {
                     satisfied = false;
-                    error += $"Attribute {i}: {_attributeSequence[i].attribute} not found, ";
+                    error += 
+                        $"Attribute {i}: {_attributeSequence[i].attribute} not found.";
                 }
 
                 if (attributes[i].format != _attributeSequence[i].format)
@@ -223,16 +279,64 @@ namespace DGraphics.Dissipation
                     error +=
                         $"Attribute {i}: {_attributeSequence[i].attribute} not satisfying dimension: {_attributeSequence[i].dimension}, ";
                 }
-
-                if (attributes[i].stream != _attributeSequence[i].stream)
-                {
-                    satisfied = false;
-                    error +=
-                        $"Attribute {i}: {_attributeSequence[i].attribute} not satisfying stream: {_attributeSequence[i].stream}, ";
-                }
             }
 
             return satisfied;
+        }
+
+        public static bool TryGetGraphicsBuffer(Mesh mesh, VertexAttribute attribute, 
+            out GraphicsBuffer buffer, 
+            out int stride, 
+            out int offset
+            )
+        {
+            buffer = null;
+            stride = 0;
+            offset = 0;
+            
+            var stream = -1;
+            mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            var attributes = mesh.GetVertexAttributes();
+            
+            // Retrieve stream of attribute.
+            for (var i = 0; i < attributes.Length; i++)
+            {
+                if (attributes[i].attribute == attribute)
+                {
+                    stream = attributes[i].stream;
+                    buffer = mesh.GetVertexBuffer(stream);
+                }
+            }
+            
+            if (stream == -1) return false;
+
+            // Retrieve stride and offset of attribute.
+            foreach (var curAttribute in attributes)
+            {
+                if (curAttribute.stream != stream) continue;
+                if (curAttribute.attribute == attribute) offset = stride;
+                stride += GetFormatSize(curAttribute.format) * curAttribute.dimension;
+            }
+
+            return true;
+        }
+            
+        private static int GetFormatSize(VertexAttributeFormat format)
+        {
+            return format switch
+            {
+                VertexAttributeFormat.Float32 => 4,
+                VertexAttributeFormat.Float16 => 2,
+                VertexAttributeFormat.UNorm8 => 1,
+                VertexAttributeFormat.SNorm8 => 1,
+                VertexAttributeFormat.UInt8 => 1,
+                VertexAttributeFormat.SInt8 => 1,
+                VertexAttributeFormat.UInt16 => 2,
+                VertexAttributeFormat.SInt16 => 2,
+                VertexAttributeFormat.UInt32 => 4,
+                VertexAttributeFormat.SInt32 => 4,
+                _ => 0
+            };
         }
         
         [DidReloadScripts]
@@ -251,6 +355,17 @@ namespace DGraphics.Dissipation
         public readonly int MeshCount;
         public readonly IReadOnlyList<ComputeBuffer> InitialPositionsBuffers;
         public readonly IReadOnlyList<GraphicsBuffer> VertexBuffers;
+        public readonly IReadOnlyList<int> VertexStrides;
+        public readonly IReadOnlyList<int> VertexOffsets;
+        
+        public readonly IReadOnlyList<GraphicsBuffer> Uv6Buffers;
+        public readonly IReadOnlyList<int> Uv6Strides;
+        public readonly IReadOnlyList<int> Uv6Offsets;
+        
+        public readonly IReadOnlyList<GraphicsBuffer> Uv7Buffers;
+        public readonly IReadOnlyList<int> Uv7Strides;
+        public readonly IReadOnlyList<int> Uv7Offsets;
+        
         public readonly IReadOnlyList<int> VertexCounts;
         public readonly IReadOnlyList<Transform> Transforms;
         
@@ -325,6 +440,17 @@ namespace DGraphics.Dissipation
             int MeshCount, 
             IReadOnlyList<ComputeBuffer> initialPositionsBuffers, 
             IReadOnlyList<GraphicsBuffer> vertexBuffers, 
+            IReadOnlyList<int> vertexStrides,
+            IReadOnlyList<int> vertexOffsets,
+            
+            IReadOnlyList<GraphicsBuffer> uv6Buffers,
+            IReadOnlyList<int> uv6Strides,
+            IReadOnlyList<int> uv6Offsets,
+            
+            IReadOnlyList<GraphicsBuffer> uv7Buffers,
+            IReadOnlyList<int> uv7Strides,
+            IReadOnlyList<int> uv7Offsets,
+            
             IReadOnlyList<int> vertexCounts,
             IReadOnlyList<Transform> transforms,
             MeshDissipationAnimParams animParams
@@ -334,7 +460,18 @@ namespace DGraphics.Dissipation
             if (vertexBuffers.Count != MeshCount || vertexCounts.Count != MeshCount || initialPositionsBuffers.Count != MeshCount)
                 throw new System.ArgumentException("Vertex buffers, vertex counts and initial positions count should match mesh count in MeshDissipationInfo.");
             InitialPositionsBuffers = new List<ComputeBuffer>(initialPositionsBuffers);
-            VertexBuffers = new List<GraphicsBuffer>(vertexBuffers);
+            VertexBuffers = vertexBuffers;
+            VertexStrides = vertexStrides;
+            VertexOffsets = vertexOffsets;
+            
+            Uv6Buffers = uv6Buffers;
+            Uv6Strides = uv6Strides;
+            Uv6Offsets = uv6Offsets;
+            
+            Uv7Buffers = uv7Buffers;
+            Uv7Strides = uv7Strides;
+            Uv7Offsets = uv7Offsets;
+            
             VertexCounts = new List<int>(vertexCounts);
             Transforms = new List<Transform>(transforms);
             AnimParams = animParams;
@@ -378,6 +515,16 @@ namespace DGraphics.Dissipation
         public void Dispose()
         {
             foreach (var buffer in VertexBuffers)
+            {
+                buffer.Release();
+            }
+            
+            foreach (var buffer in Uv6Buffers)
+            {
+                buffer.Release();
+            }
+
+            foreach (var buffer in Uv7Buffers)
             {
                 buffer.Release();
             }
