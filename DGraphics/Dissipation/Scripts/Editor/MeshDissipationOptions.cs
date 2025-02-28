@@ -104,12 +104,12 @@ namespace DGraphics.Dissipation
                 }
             }
 
-            var outlineFeature = ScriptableObject.CreateInstance<T>();
-            outlineFeature.name = "Outline PostProcessing Renderer Feature";
-            Undo.RegisterCreatedObjectUndo(outlineFeature, "Add Outline PostProcessing Renderer Feature");
+            var scrpitableFeature = ScriptableObject.CreateInstance<T>();
+            scrpitableFeature.name = "Outline PostProcessing Renderer Feature";
+            Undo.RegisterCreatedObjectUndo(scrpitableFeature, "Add Outline PostProcessing Renderer Feature");
             if (EditorUtility.IsPersistent(rendererData))
             {
-                AssetDatabase.AddObjectToAsset(outlineFeature, rendererData);
+                AssetDatabase.AddObjectToAsset(scrpitableFeature, rendererData);
             }
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(rendererData, out var guid, out long localId);
             
@@ -143,7 +143,8 @@ namespace DGraphics.Dissipation
                 Debug.LogError("Cannot Retrieve AddComponent method in ScriptableRendererData Editor.");
                 return;
             }
-            addComponentMethodInfo.Invoke(editor, new object[] {nameof(T)});
+            var typename = typeof(T).FullName;
+            addComponentMethodInfo.Invoke(editor, new object[] {typename});
         }
 
         private static void AddShaderManager()

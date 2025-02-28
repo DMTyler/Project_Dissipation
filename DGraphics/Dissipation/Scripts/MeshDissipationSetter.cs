@@ -111,10 +111,6 @@ namespace DGraphics.Dissipation
                     return;
                 }
                 
-                Debug.Log($"Position Stride: {vertexStride}, Position Offset: {vertexOffset}, \n" +
-                          $"UV6 Stride: {uv6Stride}, UV6 Offset: {uv6Offset}, \n" +
-                          $"UV7 Stride: {uv7Stride}, UV7 Offset: {uv7Offset}");
-                
                 // Retrieve initial position data
                 var vertexCount = mesh.vertexCount;
                 var bufferData = new byte[vertexCount * vertexStride];

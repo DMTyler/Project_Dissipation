@@ -20,11 +20,15 @@ namespace DGraphics.Dissipation
             EditorGUILayout.Space(10);
             
             EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("_meshFilters"), 
-                _selectedLanguage == 0? new GUIContent("网格过滤器") : new GUIContent("Mesh Filter"), true);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_divided"), 
                 _selectedLanguage == 0? new GUIContent("已分割") : new GUIContent("Divided"));
             EditorGUI.EndDisabledGroup();
+            EditorGUILayout.Space(10);
+            
+            if (GUILayout.Button(_selectedLanguage == 0? "分割网格" : "Decompose Mesh"))
+            {
+                targetScript.Calculate();
+            }
             
             serializedObject.ApplyModifiedProperties();
         }
